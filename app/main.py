@@ -4,7 +4,7 @@ import os
 import shutil
 import logging
 
-# --- CRITICAL FIX for gRPC DNS issues ---
+# --- CRITICAL FIX for gRPC DNS issues in some environments ---
 os.environ['GRPC_DNS_RESOLVER'] = 'native'
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- REFACTORED IMPORTS ---
+# Use absolute imports for clarity within the application package
 from . import services
 from .models import AskRequest
 
@@ -23,12 +24,17 @@ from .models import AskRequest
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Define project directories
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATIC_DIR = os.path.join(ROOT_DIR, "static")
+STATIC_DIR = os.path.join(ROOT_DIR, "frontend")
 UPLOAD_DIR = os.path.join(ROOT_DIR, "uploaded_files")
+# Ensure the directory for temporary uploads exists
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="Streaming RAG Chatbot Backend", version="5.0.0")
+app = FastAPI(title="Streaming RAG Chatbot Backend", version="5.1.0")
+
+# Configure CORS to allow all origins, which is useful for development.
+# For production, you should restrict this to your frontend's domain.
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"])
@@ -37,31 +43,40 @@ app.add_middleware(
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
+    """
+    Handles file uploads, processes them for the RAG knowledge base,
+    and then cleans up the uploaded file.
+    """
     file_path = os.path.join(UPLOAD_DIR, file.filename)
     try:
+        # Save the uploaded file temporarily
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        
+        # Process the file to add it to the vector store
         services.process_uploaded_file(file_path, file.filename)
-        return JSONResponse(content={"filename": file.filename, "status": "File processed."})
+        
+        return JSONResponse(content={"filename": file.filename, "status": "File processed successfully."})
     except Exception as e:
         logger.error(f"API Error processing file {file.filename}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        # Clean up the temporary file after processing
         if os.path.exists(file_path):
             os.remove(file_path)
 
 @app.post("/api/ask")
 async def ask_question(request: AskRequest):
     """
-    Handles questions by getting a streaming response from the RAG chain.
+    Handles user questions by getting a streaming response from the RAG chain.
     """
     question = request.q
     chat_history = request.chat_history or []
-    logger.info(f"Received question: {question} with history length: {len(chat_history)}")
+    logger.info(f"Received question: '{question}' with history length: {len(chat_history)}")
 
     async def stream_generator():
         try:
-            # Get the streaming generator from our service
+            # Get the streaming generator from our service layer
             response_stream = services.get_rag_response_stream(question, chat_history)
             
             # We only want to stream the 'answer' part of the response chunks
@@ -79,6 +94,7 @@ async def ask_question(request: AskRequest):
 
 @app.get("/api/files")
 async def get_files():
+    """Returns a list of all files currently in the knowledge base."""
     try:
         return {"files": services.get_indexed_files()}
     except Exception as e:
@@ -87,14 +103,16 @@ async def get_files():
 
 @app.delete("/api/files/{filename}")
 async def delete_file(filename: str):
+    """Deletes a file and its associated data from the knowledge base."""
     logger.info(f"Received request to delete file: {filename}")
     try:
         services.delete_documents_by_source(filename)
-        return JSONResponse(content={"filename": filename, "status": "File deleted."})
+        return JSONResponse(content={"filename": filename, "status": "File deleted successfully."})
     except Exception as e:
         logger.error(f"API Error deleting file {filename}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def read_root():
+    """Serves the main frontend HTML file."""
     return FileResponse(os.path.join(STATIC_DIR, 'index.html'))

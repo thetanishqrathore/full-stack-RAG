@@ -28,15 +28,18 @@ CHROMA_DB_DIR = "chroma_db"
 
 # --- INITIALIZE MODELS AND VECTOR STORE ---
 try:
+    # Initialize the local LLM using Ollama
     llm = ChatOllama(model="mistral:7b-instruct-q4_K_M")
     logger.info("Local LLM (Ollama) initialized successfully.")
 
+    # Initialize Google Generative AI embeddings
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     if not GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY not found in .env file.")
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
     logger.info("Google Embedding Model initialized successfully.")
     
+    # Initialize ChromaDB vector store for persistence
     vector_store = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
     logger.info("ChromaDB Vector Store initialized successfully.")
 except Exception as e:
@@ -46,20 +49,24 @@ except Exception as e:
 # --- SERVICE FUNCTIONS ---
 
 def get_document_loader(file_path: str):
+    """Returns the appropriate document loader based on file extension."""
     _, extension = os.path.splitext(file_path)
     extension = extension.lower()
     if extension == ".pdf": return PyPDFLoader(file_path)
     if extension == ".docx": return Docx2txtLoader(file_path)
     if extension == ".csv": return CSVLoader(file_path)
     if extension in [".html", ".htm"]: return BSHTMLLoader(file_path)
+    # Default loader for text-based files
     return UnstructuredFileLoader(file_path)
 
 def process_uploaded_file(file_path: str, filename: str):
+    """Loads, splits, and embeds a document into the vector store."""
     try:
         loader = get_document_loader(file_path)
         documents = loader.load()
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         chunks = text_splitter.split_documents(documents)
+        # Add document chunks to the vector store
         vector_store.add_documents(chunks)
         logger.info(f"Successfully added {filename} to the knowledge base.")
     except Exception as e:
@@ -67,10 +74,14 @@ def process_uploaded_file(file_path: str, filename: str):
         raise e
 
 def get_indexed_files():
+    """Retrieves a list of unique source filenames from the vector store."""
     try:
+        # Get all items and their metadata from the collection
         items = vector_store._collection.get(include=["metadatas"])
         if not items['ids']: return []
+        # Extract the 'source' from metadata
         sources = [meta.get('source') for meta in items['metadatas'] if meta]
+        # Get a unique, sorted list of base filenames
         unique_files = sorted(list(set(os.path.basename(s) for s in sources if s)))
         return unique_files
     except Exception as e:
@@ -78,8 +89,10 @@ def get_indexed_files():
         return []
 
 def delete_documents_by_source(filename: str):
+    """Deletes all document chunks associated with a specific source filename."""
     try:
         all_docs = vector_store._collection.get(include=["metadatas"])
+        # Find all document IDs that match the source filename
         ids_to_delete = [
             doc_id for i, doc_id in enumerate(all_docs['ids'])
             if all_docs['metadatas'][i] and os.path.basename(all_docs['metadatas'][i].get('source', '')) == filename
@@ -87,6 +100,7 @@ def delete_documents_by_source(filename: str):
         if not ids_to_delete:
             logger.warning(f"No documents found for source: {filename}.")
             return
+        # Delete the documents from the collection by their IDs
         vector_store._collection.delete(ids=ids_to_delete)
         logger.info(f"Successfully deleted documents for source: {filename}")
     except Exception as e:
@@ -94,8 +108,11 @@ def delete_documents_by_source(filename: str):
         raise e
 
 def get_rag_response_stream(input_text: str, chat_history: list):
-    """Gets a streaming response from the RAG chain using a robust, standard pattern."""
+    """
+    Gets a streaming response from the RAG chain with improved prompting.
+    """
     
+    # Convert the chat history to the expected format of Human/AI messages
     history_messages = []
     for human, ai in chat_history:
         history_messages.append(HumanMessage(content=human))
@@ -103,6 +120,8 @@ def get_rag_response_stream(input_text: str, chat_history: list):
 
     retriever = vector_store.as_retriever()
     
+    # This prompt helps the model reformulate the user's question to be standalone,
+    # using the context of the chat history.
     contextualize_q_system_prompt = (
         "Given a chat history and the latest user question "
         "which might reference context in the chat history, "
@@ -119,12 +138,21 @@ def get_rag_response_stream(input_text: str, chat_history: list):
         llm, retriever, contextualize_q_prompt
     )
 
+    # *** IMPROVED PROMPT ***
+    # This new prompt gives the LLM clearer instructions on how to behave based on the
+    # presence and quality of the retrieved context.
     qa_system_prompt = (
-        "You are an assistant for question-answering tasks. "
-        "Use the following pieces of retrieved context to answer "
-        "the question. If you don't know the answer, just say "
-        "that you don't know. Be concise."
-        "\n\nContext:\n{context}"
+        "You are a helpful and polite assistant for question-answering tasks. Your goal is to provide the most accurate and relevant answer possible.\n\n"
+        "Here is some context retrieved from a knowledge base that might be relevant to the user's question:\n"
+        "----------------\n"
+        "Context:\n{context}\n"
+        "----------------\n\n"
+        "Please follow these rules when answering:\n"
+        "1. **Analyze the Context:** Carefully examine the provided context. If it is highly relevant and directly answers the user's question, use it as your primary source. Synthesize the information from the context to form a comprehensive answer.\n"
+        "2. **Handle Insufficient Context:** If the context is not relevant, is incomplete, or does not seem to answer the question, DO NOT mention the context or say you couldn't find information. Instead, rely on your own general knowledge to answer the question as helpfully as you can. You can politely state that you are answering based on your general understanding if it feels natural.\n"
+        "3. **Prioritize Semantic Meaning:** Focus on the underlying meaning of the question and the context, not just keyword matching.\n"
+        "4. **Be Polite and Conversational:** Always maintain a friendly and respectful tone.\n"
+        "5. **No Context Provided:** If no context is provided at all (the context block is empty), simply answer the question using your own extensive knowledge base."
     )
     qa_prompt = ChatPromptTemplate.from_messages([
         ("system", qa_system_prompt),
@@ -132,10 +160,13 @@ def get_rag_response_stream(input_text: str, chat_history: list):
         ("human", "{input}"),
     ])
     
+    # This chain combines the retrieved documents into a single string.
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
+    # This is the final chain that orchestrates the retrieval and answer generation.
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
+    # Stream the response back to the user.
     return rag_chain.stream({
         "input": input_text,
         "chat_history": history_messages
