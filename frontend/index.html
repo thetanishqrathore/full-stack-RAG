@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local RAG - Enhanced UI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Icons Library -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <script>
+      // Custom Tailwind configuration with the new color palette from the brain image
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'brand-bg': '#FDFBF7', // Adjusted soft cream background for a better match
+              'brand-dark-purple': '#3a2d56', // Deep purple for text and dark elements
+              'brand-light-purple': '#6d4f98', // Lighter purple for accents
+              'brand-pink': '#d86a8a', // Vibrant pink for gradients
+              'brand-orange': '#f5b37e', // Warm orange for gradients
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+      }
+      #chat-messages::-webkit-scrollbar { width: 6px; }
+      #chat-messages::-webkit-scrollbar-track { background: transparent; }
+      #chat-messages::-webkit-scrollbar-thumb { background: #d86a8a; border-radius: 3px; }
+      #chat-messages::-webkit-scrollbar-thumb:hover { background: #c75a79; }
+      .chat-message { animation: fadeIn 0.5s ease-in-out; }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .glassmorphism {
+        background: rgba(58, 45, 86, 0.65);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .glassmorphism-light {
+        background: rgba(253, 251, 247, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(58, 45, 86, 0.1);
+      }
+      #welcome-brain { animation: float 6s ease-in-out infinite, pulse-glow 4s ease-in-out infinite; }
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-20px); }
+        100% { transform: translateY(0px); }
+      }
+      @keyframes pulse-glow {
+        0% { filter: drop-shadow(0 0 5px rgba(216, 106, 138, 0.4)); }
+        50% { filter: drop-shadow(0 0 20px rgba(110, 79, 152, 0.6)); }
+        100% { filter: drop-shadow(0 0 5px rgba(216, 106, 138, 0.4)); }
+      }
+    </style>
+  </head>
+  <body class="bg-brand-bg text-brand-dark-purple">
+    <div class="flex flex-col lg:flex-row h-screen">
+      <!-- Left Column: File Management -->
+      <div
+        id="file-panel"
+        class="w-full lg:w-1/5 text-gray-200 p-6 flex-col absolute lg:relative inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out z-20 flex glassmorphism rounded-r-2xl"
+      >
+        <div class="flex justify-between items-center mb-8">
+          <div class="flex items-center space-x-3">
+            <span class="bg-gradient-to-br from-brand-pink to-brand-orange p-2 rounded-lg shadow-lg">
+              <i class="fa-solid fa-brain fa-lg text-white"></i>
+            </span>
+            <h1 class="text-2xl font-bold text-white">Local RAG</h1>
+          </div>
+          <button id="close-panel-btn" class="lg:hidden text-gray-300 hover:text-white">
+            <i class="fa-solid fa-times fa-lg"></i>
+          </button>
+        </div>
+        <div class="mb-6">
+          <h2 class="text-sm font-semibold mb-3 text-gray-200 uppercase tracking-wider">Upload New File</h2>
+          <div class="bg-black bg-opacity-20 p-4 rounded-lg">
+            <input type="file" id="file-input" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gradient-to-r file:from-brand-pink file:to-brand-orange file:text-white hover:file:opacity-90 cursor-pointer transition-opacity"/>
+            <button id="upload-button" class="mt-4 w-full bg-gradient-to-r from-brand-pink to-brand-orange text-white py-2 px-4 rounded-lg hover:opacity-90 transition-opacity font-semibold shadow-md">
+              <i class="fa-solid fa-upload mr-2"></i>Upload
+            </button>
+            <p id="upload-status" class="text-xs text-center mt-2 text-gray-300 h-4"></p>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto pr-2">
+          <h2 class="text-sm font-semibold mb-3 text-gray-200 uppercase tracking-wider">Knowledge Base</h2>
+          <ul id="file-list" class="space-y-2"></ul>
+        </div>
+      </div>
+      <div id="panel-overlay" class="lg:hidden fixed inset-0 bg-black opacity-50 z-10 hidden"></div>
+
+      <!-- Right Column: Chat Interface -->
+      <div class="w-full lg:w-4/5 flex flex-col bg-brand-bg h-screen">
+        <div class="border-b border-brand-dark-purple border-opacity-10 p-4 flex items-center justify-between">
+          <div class="flex items-center">
+            <button id="open-panel-btn" class="lg:hidden mr-4 text-brand-dark-purple hover:text-brand-pink">
+              <i class="fa-solid fa-bars fa-lg"></i>
+            </button>
+            <h2 class="text-xl font-bold text-brand-dark-purple">Chat Assistant</h2>
+          </div>
+          <span id="status-indicator" class="w-3 h-3 bg-red-500 rounded-full animate-pulse" title="Backend Disconnected"></span>
+        </div>
+        <div id="chat-messages" class="flex-1 p-6 overflow-y-auto space-y-6 relative">
+          <div id="welcome-screen" class="absolute inset-0 flex flex-col justify-center items-center transition-all duration-500 ease-in-out p-4">
+            <img id="welcome-brain" src="https://i.imgur.com/Rceh03s.png" alt="Polygonal Brain" class="w-48 h-48 md:w-64 md:h-64 object-contain" onerror="this.onerror=null; this.src='https://placehold.co/256x256/FFF8F0/3a2d56?text=Brain+Image';"/>
+            <h3 class="mt-12 text-xl text-brand-dark-purple opacity-70">How can I help you today?</h3>
+          </div>
+        </div>
+        <div class="p-6 bg-transparent">
+          <div id="sources-container" class="mb-2 text-xs text-brand-dark-purple opacity-70 h-5"></div>
+          <div class="flex items-center glassmorphism-light rounded-xl p-2 shadow-sm">
+            <textarea id="chat-input" placeholder="Ask a question..." class="flex-1 p-2 bg-transparent border-0 rounded-lg focus:outline-none resize-none text-brand-dark-purple placeholder-brand-dark-purple placeholder-opacity-50" rows="1"></textarea>
+            <button id="send-button" class="bg-gradient-to-br from-brand-pink to-brand-orange text-white rounded-lg w-10 h-10 flex items-center justify-center hover:opacity-90 transition-all disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed shadow-md">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "http://127.0.0.1:8000";
+
+      // --- DOM ELEMENTS ---
+      const welcomeScreen = document.getElementById("welcome-screen");
+      const openBtn = document.getElementById("open-panel-btn");
+      const closeBtn = document.getElementById("close-panel-btn");
+      const panel = document.getElementById("file-panel");
+      const overlay = document.getElementById("panel-overlay");
+      const fileInput = document.getElementById("file-input");
+      const uploadButton = document.getElementById("upload-button");
+      const uploadStatus = document.getElementById("upload-status");
+      const fileList = document.getElementById("file-list");
+      const chatMessages = document.getElementById("chat-messages");
+      const chatInput = document.getElementById("chat-input");
+      const sendButton = document.getElementById("send-button");
+      const statusIndicator = document.getElementById("status-indicator");
+
+      // --- STATE ---
+      let chatHistory = []; // To store conversation history
+
+      // --- MOBILE PANEL TOGGLE ---
+      function openPanel() { panel.classList.remove("-translate-x-full"); overlay.classList.remove("hidden"); }
+      function closePanel() { panel.classList.add("-translate-x-full"); overlay.classList.add("hidden"); }
+      openBtn.addEventListener("click", openPanel);
+      closeBtn.addEventListener("click", closePanel);
+      overlay.addEventListener("click", closePanel);
+
+      // --- FILE MANAGEMENT ---
+      async function fetchFiles() {
+        try {
+          const response = await fetch(`${API_URL}/api/files`);
+          if (!response.ok) throw new Error("Failed to fetch files");
+          const data = await response.json();
+          renderFileList(data.files);
+          statusIndicator.classList.remove("bg-red-500");
+          statusIndicator.classList.add("bg-brand-pink");
+          statusIndicator.title = "Backend Connected";
+        } catch (error) {
+          console.error("Error fetching files:", error);
+          fileList.innerHTML = '<li class="text-red-400 text-sm p-3 bg-red-900 bg-opacity-20 rounded-lg">Could not load files. Is the server running?</li>';
+          statusIndicator.classList.remove("bg-brand-pink");
+          statusIndicator.classList.add("bg-red-500");
+          statusIndicator.title = "Backend Disconnected";
+        }
+      }
+
+      function renderFileList(files) {
+        fileList.innerHTML = "";
+        if (files.length === 0) {
+          fileList.innerHTML = '<li class="text-gray-400 text-sm p-3">No files uploaded yet.</li>';
+          return;
+        }
+        files.forEach((file) => {
+          const li = document.createElement("li");
+          li.className = "p-3 bg-black bg-opacity-20 rounded-lg flex justify-between items-center text-sm chat-message";
+          li.innerHTML = `<span class="truncate mr-2 text-gray-300"><i class="fa-regular fa-file-lines mr-2 text-gray-400"></i>${file}</span><button onclick="deleteFile('${file}')" class="text-red-500 hover:text-red-400 font-semibold flex-shrink-0"><i class="fa-solid fa-trash-can"></i></button>`;
+          fileList.appendChild(li);
+        });
+      }
+
+      async function uploadFile() {
+        if (!fileInput.files.length) {
+          uploadStatus.textContent = "Please select a file first.";
+          return;
+        }
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+        uploadStatus.textContent = `Uploading ${file.name}...`;
+        uploadButton.disabled = true;
+        try {
+          const response = await fetch(`${API_URL}/api/upload`, { method: "POST", body: formData });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.detail || "Upload failed");
+          uploadStatus.textContent = `✅ ${result.status}`;
+          fileInput.value = "";
+          fetchFiles();
+        } catch (error) {
+          uploadStatus.textContent = `❌ Error: ${error.message}`;
+        } finally {
+          uploadButton.disabled = false;
+          setTimeout(() => (uploadStatus.textContent = ""), 4000);
+        }
+      }
+
+      window.deleteFile = async (filename) => {
+        if (!confirm(`Are you sure you want to delete ${filename}?`)) return;
+        try {
+          const response = await fetch(`${API_URL}/api/files/${filename}`, { method: "DELETE" });
+          if (!response.ok) throw new Error((await response.json()).detail || "Deletion failed");
+          fetchFiles();
+          chatHistory = []; // Reset history after deleting a file
+        } catch (error) {
+          alert(`Could not delete file: ${error.message}`);
+        }
+      };
+
+      // --- CHAT FUNCTIONALITY ---
+      function addChatMessage(role, content) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "flex chat-message";
+        let messageDiv;
+        if (role === "user") {
+          wrapper.classList.add("justify-end");
+          messageDiv = `<div class="bg-brand-dark-purple text-white p-4 rounded-2xl rounded-br-none shadow-md max-w-lg"><p class="text-sm">${content}</p></div>`;
+        } else {
+          messageDiv = `<div class="bg-white p-4 rounded-2xl rounded-tl-none shadow-md max-w-lg border border-gray-200"><p class="text-sm text-brand-dark-purple">${content}</p></div>`;
+        }
+        wrapper.innerHTML = messageDiv;
+        chatMessages.appendChild(wrapper);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return wrapper.querySelector("p");
+      }
+
+      async function handleSend() {
+        const question = chatInput.value.trim();
+        if (!question) return;
+
+        if (chatHistory.length === 0) {
+          welcomeScreen.classList.add("opacity-0", "scale-90");
+          setTimeout(() => { welcomeScreen.style.display = 'none'; }, 500);
+        }
+
+        addChatMessage("user", question);
+        chatInput.value = "";
+        chatInput.style.height = "auto";
+        sendButton.disabled = true;
+
+        const thinkingMessageP = addChatMessage("bot", '<span class="italic opacity-70">Thinking...</span>');
+        let fullResponse = "";
+
+        try {
+          const response = await fetch(`${API_URL}/api/ask`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ q: question, chat_history: chatHistory }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let firstChunk = true;
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            fullResponse += chunk;
+
+            if (firstChunk) {
+              thinkingMessageP.innerHTML = ""; // Clear "Thinking..."
+              firstChunk = false;
+            }
+            
+            // This is a simple way to render; for complex markdown, a library would be better.
+            thinkingMessageP.innerHTML = fullResponse.replace(/\n/g, '<br>');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
+
+          chatHistory.push([question, fullResponse]); // Add conversation to history
+
+        } catch (error) {
+          console.error("Error asking question:", error);
+          thinkingMessageP.innerHTML = "Sorry, something went wrong. Please check the server logs.";
+          thinkingMessageP.parentElement.classList.add("text-red-500");
+        } finally {
+          sendButton.disabled = false;
+          chatInput.focus();
+        }
+      }
+
+      // --- INITIALIZATION ---
+      document.addEventListener("DOMContentLoaded", () => {
+        uploadButton.addEventListener("click", uploadFile);
+        sendButton.addEventListener("click", handleSend);
+        chatInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+          }
+        });
+        chatInput.addEventListener("input", () => {
+          chatInput.style.height = "auto";
+          chatInput.style.height = chatInput.scrollHeight + "px";
+        });
+        fetchFiles();
+      });
+    </script>
+  </body>
+</html>

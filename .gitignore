@@ -1,0 +1,35 @@
+# --- Virtual Environment ---
+# Ignore the virtual environment folder
+venv/
+.venv/
+
+# --- Python Caches ---
+# Ignore Python's bytecode and cache folders
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Sensitive Information ---
+# CRITICAL: Ignore the .env file to protect your API keys
+.env
+
+# --- Local Databases ---
+# Ignore the local ChromaDB vector store
+chroma_db/
+
+# --- Uploaded Files ---
+# Ignore the directory for temporarily stored uploads
+uploaded_files/
+
+# --- IDE/Editor specific files ---
+# Visual Studio Code
+.vscode/
+# JetBrains (PyCharm, etc.)
+.idea/
+
+# --- Operating System files ---
+# macOS
+.DS_Store
+# Windows
+Thumbs.db
