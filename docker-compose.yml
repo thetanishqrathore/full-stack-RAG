@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # Your FastAPI Backend
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY} # Load from a .env file
+    depends_on:
+      - ollama
+      - chroma
+    networks:
+      - rag_net
+
+  # Ollama Language Model Service
+  ollama:
+    image: ollama/ollama
+    # For GPU acceleration (requires NVIDIA container toolkit on the host machine)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rag_net
+
+  # ChromaDB Vector Store
+  chroma:
+    image: chromadb/chroma
+    ports:
+      - "8001:8000" # Note: Chroma runs on port 8000 inside its container
+    volumes:
+      - chroma_data:/chroma/.chroma/index
+    networks:
+      - rag_net
+
+volumes:
+  ollama_data:
+  chroma_data:
+
+networks:
+  rag_net:

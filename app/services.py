@@ -3,7 +3,7 @@
 import os
 import logging
 from fastapi import HTTPException
-
+import chromadb
 # LangChain & AI Imports
 import langchain
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -18,6 +18,7 @@ from langchain.chains.history_aware_retriever import create_history_aware_retrie
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.messages import AIMessage, HumanMessage
 
+
 # --- CONFIGURATION ---
 logger = logging.getLogger(__name__)
 # --- FIX: Set debug mode to False for cleaner terminal output ---
@@ -27,6 +28,8 @@ langchain.debug = False
 CHROMA_DB_DIR = "chroma_db"
 
 # --- INITIALIZE MODELS AND VECTOR STORE ---
+
+# for local hosting
 try:
     # Initialize the local LLM using Ollama
     llm = ChatOllama(model="mistral:7b-instruct-q4_K_M")
@@ -45,6 +48,7 @@ try:
 except Exception as e:
     logger.error(f"Error during AI/DB initialization: {e}")
     raise
+
 
 # --- SERVICE FUNCTIONS ---
 
