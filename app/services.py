@@ -6,7 +6,7 @@ from fastapi import HTTPException
 import chromadb
 # LangChain & AI Imports
 import langchain
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import OllamaEmbeddings # <-- IMPORT THIS
 from langchain_community.chat_models import ChatOllama
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import (
@@ -28,7 +28,7 @@ langchain.debug = False
 CHROMA_DB_DIR = "chroma_db"
 
 # --- INITIALIZE MODELS AND VECTOR STORE ---
-
+'''
 # for local hosting
 try:
     # Initialize the local LLM using Ollama
@@ -45,6 +45,33 @@ try:
     # Initialize ChromaDB vector store for persistence
     vector_store = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
     logger.info("ChromaDB Vector Store initialized successfully.")
+except Exception as e:
+    logger.error(f"Error during AI/DB initialization: {e}")
+    raise
+'''
+
+try:
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+    CHROMA_HOST = os.getenv("CHROMA_HOST", "chroma")
+    CHROMA_PORT = int(os.getenv("CHROMA_PORT", 8000))
+
+    # Initialize the LLM to connect to the Ollama service
+    llm = ChatOllama(model="llama3:8b-instruct", base_url=OLLAMA_BASE_URL)
+    logger.info(f"Connecting to Ollama at {OLLAMA_BASE_URL}")
+
+    # Initialize Ollama Embeddings for nomic-embed-text
+    embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_BASE_URL)
+    logger.info("Ollama Embedding Model (nomic-embed-text) initialized successfully.")
+
+    # Initialize the ChromaDB client to connect to the ChromaDB server
+    chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+    vector_store = Chroma(
+        client=chroma_client,
+        collection_name="rag_collection",
+        embedding_function=embeddings,
+    )
+    logger.info(f"ChromaDB client connected to http://{CHROMA_HOST}:{CHROMA_PORT}")
+
 except Exception as e:
     logger.error(f"Error during AI/DB initialization: {e}")
     raise

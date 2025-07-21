@@ -20,13 +20,13 @@ services:
   ollama:
     image: ollama/ollama
     # For GPU acceleration (requires NVIDIA container toolkit on the host machine)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy: # <-- UNCOMMENT THIS BLOCK
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     ports:
       - "11434:11434"
     volumes:
