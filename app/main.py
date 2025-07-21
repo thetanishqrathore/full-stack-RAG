@@ -6,7 +6,7 @@ import logging
 
 # --- CRITICAL FIX for gRPC DNS issues in some environments ---
 os.environ['GRPC_DNS_RESOLVER'] = 'native'
-
+from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -111,8 +111,5 @@ async def delete_file(filename: str):
     except Exception as e:
         logger.error(f"API Error deleting file {filename}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/")
-async def read_root():
-    """Serves the main frontend HTML file."""
-    return FileResponse(os.path.join(STATIC_DIR, 'index.html'))
+# Mount the 'frontend' directory to serve static files like index.html, images, etc.
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

@@ -56,7 +56,7 @@ try:
     CHROMA_PORT = int(os.getenv("CHROMA_PORT", 8000))
 
     # Initialize the LLM to connect to the Ollama service
-    llm = ChatOllama(model="llama3:8b-instruct", base_url=OLLAMA_BASE_URL)
+    llm = ChatOllama(model="llama3:8b", base_url=OLLAMA_BASE_URL)
     logger.info(f"Connecting to Ollama at {OLLAMA_BASE_URL}")
 
     # Initialize Ollama Embeddings for nomic-embed-text
